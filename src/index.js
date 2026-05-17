@@ -136,7 +136,7 @@ function ethSend(fromName, toName, amount) {
   const tx = new EthereumTransaction({
     from: sender.address, to: receiver.address,
     value: amount, gasPrice: 20, gasLimit: 21000,
-    nonce: eth.getNonce(sender.address),
+    nonce: eth.getPendingNonce(sender.address),
   });
   tx.sign(sender.privateKey, sender.publicKey);
 
