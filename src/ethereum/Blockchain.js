@@ -57,6 +57,11 @@ class EthereumBlockchain {
     return this.getAccount(address).nonce;
   }
 
+  getPendingNonce(address) {
+    const pendingCount = this.mempool.filter(t => t.from === address).length;
+    return this.getAccount(address).nonce + pendingCount;
+  }
+
   addToMempool(tx) {
     if (!tx.verify()) throw new Error('Invalid transaction signature');
 
@@ -80,20 +85,21 @@ class EthereumBlockchain {
   }
 
   mineBlock(minerAddress) {
-    const sorted = [...this.mempool].sort((a, b) => {
-      if (a.from === b.from) return a.nonce - b.nonce;
-      return b.gasPrice - a.gasPrice;
-    });
+    const byGas = [...this.mempool].sort((a, b) => b.gasPrice - a.gasPrice);
     const selected = [];
     let blockGas = 0;
+    const nextNonce = new Map();
 
-    for (const tx of sorted) {
+    for (const tx of byGas) {
+      const expected = nextNonce.get(tx.from) ?? this.getAccount(tx.from).nonce;
+      if (tx.nonce !== expected) continue;
       const gasNeeded = tx.isContractCreation() ? CONTRACT_DEPLOY_GAS
         : tx.isContractCall() ? CONTRACT_CALL_GAS
         : BASE_GAS_COST;
       if (blockGas + gasNeeded > MAX_GAS_PER_BLOCK) break;
       selected.push(tx);
       blockGas += gasNeeded;
+      nextNonce.set(tx.from, expected + 1);
     }
 
     const block = new EthereumBlock({
@@ -238,7 +244,7 @@ class EthereumBlockchain {
     const templateId = keccak256(contractSpec.name + Date.now() + Math.random());
     this._contractTemplates.set(templateId, contractSpec);
 
-    const nonce = this.getNonce(deployerWallet.address);
+    const nonce = this.getPendingNonce(deployerWallet.address);
     const tx = new EthereumTransaction({
       from: deployerWallet.address,
       to: null,
@@ -253,7 +259,7 @@ class EthereumBlockchain {
   }
 
   callContract(contractAddress, method, args, callerWallet, value = 0) {
-    const nonce = this.getNonce(callerWallet.address);
+    const nonce = this.getPendingNonce(callerWallet.address);
     const tx = new EthereumTransaction({
       from: callerWallet.address,
       to: contractAddress,
