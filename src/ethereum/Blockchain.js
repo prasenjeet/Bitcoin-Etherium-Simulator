@@ -89,10 +89,11 @@ class EthereumBlockchain {
     const selected = [];
     let blockGas = 0;
     const nextNonce = new Map();
+    const remaining = [];
 
     for (const tx of byGas) {
       const expected = nextNonce.get(tx.from) ?? this.getAccount(tx.from).nonce;
-      if (tx.nonce !== expected) continue;
+      if (tx.nonce !== expected) { remaining.push(tx); continue; }
       const gasNeeded = tx.isContractCreation() ? CONTRACT_DEPLOY_GAS
         : tx.isContractCall() ? CONTRACT_CALL_GAS
         : BASE_GAS_COST;
@@ -100,6 +101,25 @@ class EthereumBlockchain {
       selected.push(tx);
       blockGas += gasNeeded;
       nextNonce.set(tx.from, expected + 1);
+    }
+
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (let i = remaining.length - 1; i >= 0; i--) {
+        const tx = remaining[i];
+        const expected = nextNonce.get(tx.from) ?? this.getAccount(tx.from).nonce;
+        if (tx.nonce !== expected) continue;
+        const gasNeeded = tx.isContractCreation() ? CONTRACT_DEPLOY_GAS
+          : tx.isContractCall() ? CONTRACT_CALL_GAS
+          : BASE_GAS_COST;
+        if (blockGas + gasNeeded > MAX_GAS_PER_BLOCK) continue;
+        selected.push(tx);
+        blockGas += gasNeeded;
+        nextNonce.set(tx.from, expected + 1);
+        remaining.splice(i, 1);
+        changed = true;
+      }
     }
 
     const block = new EthereumBlock({
