@@ -1,0 +1,16 @@
+{
+  "name": "crypto-simulator",
+  "version": "1.0.0",
+  "description": "Bitcoin and Ethereum blockchain simulator in Node.js",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "demo": "node src/demo.js",
+    "test": "node src/test.js"
+  },
+  "dependencies": {
+    "elliptic": "^6.5.4",
+    "js-sha256": "^0.9.0",
+    "js-sha3": "^0.8.0"
+  }
+}
