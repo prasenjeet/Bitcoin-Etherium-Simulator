@@ -67,9 +67,12 @@ class EthereumBlockchain {
       throw new Error(`Invalid nonce: expected ${expectedNonce}, got ${tx.nonce}`);
     }
 
+    const pendingCost = this.mempool
+      .filter(t => t.from === tx.from)
+      .reduce((sum, t) => sum + t.value + t.maxFee() / 1e9, 0);
     const maxCost = tx.value + tx.maxFee() / 1e9;
-    if (sender.balance < maxCost) {
-      throw new Error(`Insufficient balance: need ${maxCost.toFixed(6)} ETH, have ${sender.balance} ETH`);
+    if (sender.balance < pendingCost + maxCost) {
+      throw new Error(`Insufficient balance: need ${(pendingCost + maxCost).toFixed(6)} ETH, have ${sender.balance} ETH`);
     }
 
     this.mempool.push(tx);
@@ -77,7 +80,10 @@ class EthereumBlockchain {
   }
 
   mineBlock(minerAddress) {
-    const sorted = [...this.mempool].sort((a, b) => b.gasPrice - a.gasPrice);
+    const sorted = [...this.mempool].sort((a, b) => {
+      if (a.from === b.from) return a.nonce - b.nonce;
+      return b.gasPrice - a.gasPrice;
+    });
     const selected = [];
     let blockGas = 0;
 
