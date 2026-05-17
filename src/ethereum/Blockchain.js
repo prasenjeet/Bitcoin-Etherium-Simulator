@@ -61,8 +61,10 @@ class EthereumBlockchain {
     if (!tx.verify()) throw new Error('Invalid transaction signature');
 
     const sender = this.getAccount(tx.from);
-    if (sender.nonce !== tx.nonce) {
-      throw new Error(`Invalid nonce: expected ${sender.nonce}, got ${tx.nonce}`);
+    const pendingCount = this.mempool.filter(t => t.from === tx.from).length;
+    const expectedNonce = sender.nonce + pendingCount;
+    if (expectedNonce !== tx.nonce) {
+      throw new Error(`Invalid nonce: expected ${expectedNonce}, got ${tx.nonce}`);
     }
 
     const maxCost = tx.value + tx.maxFee() / 1e9;

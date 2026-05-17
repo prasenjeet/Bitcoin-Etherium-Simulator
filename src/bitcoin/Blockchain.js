@@ -45,6 +45,20 @@ class BitcoinBlockchain {
   addToMempool(transaction) {
     const result = transaction.verify(this.utxoSet);
     if (!result.valid) throw new Error(`Invalid transaction: ${result.reason}`);
+
+    const pendingSpent = new Set();
+    for (const tx of this.mempool) {
+      for (const input of tx.inputs) {
+        pendingSpent.add(`${input.txid}:${input.outputIndex}`);
+      }
+    }
+    for (const input of transaction.inputs) {
+      const key = `${input.txid}:${input.outputIndex}`;
+      if (pendingSpent.has(key)) {
+        throw new Error(`Invalid transaction: UTXO ${key} already spent by pending transaction`);
+      }
+    }
+
     this.mempool.push(transaction);
     return transaction.txid;
   }
@@ -55,7 +69,6 @@ class BitcoinBlockchain {
     // Coinbase transaction (block reward)
     const coinbase = new BitcoinTransaction();
     coinbase.addOutput(minerAddress, this.blockReward(this.height + 1));
-    coinbase._computeTxid();
 
     // Pick transactions from mempool (highest fee first)
     const sorted = [...this.mempool].sort((a, b) => b.fee - a.fee);
@@ -64,6 +77,7 @@ class BitcoinBlockchain {
     // Add miner fees to coinbase
     const totalFees = selected.reduce((sum, tx) => sum + tx.fee, 0);
     if (totalFees > 0) coinbase.outputs[0].amount += totalFees;
+    coinbase._computeTxid();
 
     const transactions = [coinbase, ...selected];
 
@@ -92,13 +106,22 @@ class BitcoinBlockchain {
 
   _applyBlock(block, confirmedTxs) {
     for (const tx of block.transactions) {
-      // Mark spent UTXOs
+      let hasDoubleSpend = false;
+      for (const input of tx.inputs) {
+        const key = `${input.txid}:${input.outputIndex}`;
+        const utxo = this.utxoSet.get(key);
+        if (utxo && utxo.spent) {
+          hasDoubleSpend = true;
+          break;
+        }
+      }
+      if (hasDoubleSpend) continue;
+
       for (const input of tx.inputs) {
         const key = `${input.txid}:${input.outputIndex}`;
         const utxo = this.utxoSet.get(key);
         if (utxo) utxo.spent = true;
       }
-      // Create new UTXOs
       tx.outputs.forEach((output, i) => {
         const key = `${tx.txid}:${i}`;
         this.utxoSet.set(key, new UTXO(tx.txid, i, output.address, output.amount));
